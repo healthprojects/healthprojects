@@ -1,0 +1,93 @@
+name: Deploy improve-access-to-planned-care frontend to GitHub Pages
+
+# Builds the Barod prototype (improve-access-to-planned-care/frontend) and
+# publishes it at https://<owner>.github.io/<repo>/improve-access-to-planned-care/.
+#
+# Note: a repository has one GitHub Pages site. If another subproject also
+# needs publishing, build it in this same workflow into its own directory
+# under _site/ rather than adding a second Pages deployment.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'improve-access-to-planned-care/frontend/**'
+      - '.github/workflows/improve-access-to-planned-care-frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: improve-access-to-planned-care/frontend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: improve-access-to-planned-care/frontend/package.json
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: improve-access-to-planned-care/frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check locales
+        run: pnpm run check:locales
+
+      - name: Type-check
+        run: pnpm run check
+
+      - name: Build site
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/improve-access-to-planned-care
+        run: pnpm run build
+
+      - name: Assemble Pages site
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/_site"
+          cp -R build "$GITHUB_WORKSPACE/_site/improve-access-to-planned-care"
+          cat > "$GITHUB_WORKSPACE/_site/index.html" <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <meta http-equiv="refresh" content="0; url=improve-access-to-planned-care/">
+          <title>Health Projects</title>
+          <a href="improve-access-to-planned-care/">Barod prototype</a>
+          HTML
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
